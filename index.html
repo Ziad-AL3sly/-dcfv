@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="description" content="منصة مواقيت الصلاة المتكاملة في مصر - أدق مواقيت الأذان، إمساكية رمضان، بوصلة قبلة، بث مباشر، خرائط المساجد">
+    <meta name="keywords" content="مواقيت الصلاة, مصر, الأذان, القاهرة, الإسكندرية, رمضان, قبلة, مساجد, قرآن">
+    <meta name="author" content="Prayer Times Egypt">
+    <meta name="theme-color" content="#1a472a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1903/1903315.png">
+    <title>منصة مواقيت الصلاة | مصر ELITE - أدق مواقيت الأذان في مصر</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Charts & Maps -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Animations -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css" />
+    
+    <style>
+        /* Critical CSS for initial render */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #0a0f1a;
+            overflow-x: hidden;
+        }
+        
+        .loading-screen-elite {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0f1a 0%, #1a472a 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.8s ease;
+        }
+        
+        .loader-elite {
+            text-align: center;
+        }
+        
+        .loader-elite .spinner {
+            width: 80px;
+            height: 80px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: #fbbf24;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loader-elite p {
+            color: white;
+            font-size: 1.2em;
+            letter-spacing: 2px;
+        }
+    </style>
+    <link rel="stylesheet" href="style-elite.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen-elite" id="loadingScreen">
+        <div class="loader-elite">
+            <div class="spinner"></div>
+            <p>جاري تحميل منصة مواقيت الصلاة...</p>
+            <p style="font-size: 0.8em; margin-top: 10px;">أدق مواقيت الأذان في مصر</p>
+        </div>
+    </div>
+
+    <!-- PWA Install Prompt -->
+    <div id="installPrompt" class="install-prompt" style="display: none;">
+        <div class="install-content">
+            <i class="fas fa-download"></i>
+            <div>
+                <h4>ثبّت التطبيق</h4>
+                <p>للاستخدام السريع من شاشة الجوال</p>
+            </div>
+            <button id="installApp">تثبيت</button>
+            <button id="closeInstall">✕</button>
+        </div>
+    </div>
+
+    <!-- Floating Action Button -->
+    <div class="fab" id="fab">
+        <i class="fas fa-microphone-alt"></i>
+        <div class="fab-menu">
+            <div class="fab-item" data-action="adhan">
+                <i class="fas fa-mosque"></i>
+                <span>أذان</span>
+            </div>
+            <div class="fab-item" data-action="qibla">
+                <i class="fas fa-compass"></i>
+                <span>قبلة</span>
+            </div>
+            <div class="fab-item" data-action="share">
+                <i class="fas fa-share-alt"></i>
+                <span>مشاركة</span>
+            </div>
+            <div class="fab-item" data-action="notification">
+                <i class="fas fa-bell"></i>
+                <span>تنبيه</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div class="app-elite">
+        <!-- Sidebar Premium -->
+        <div class="sidebar-elite" id="sidebarElite">
+            <div class="sidebar-user">
+                <div class="user-avatar">
+                    <i class="fas fa-user-astronaut"></i>
+                </div>
+                <h3>مرحباً بك</h3>
+                <p>في منصة مواقيت الصلاة</p>
+                <div class="user-stats">
+                    <div class="stat">
+                        <span id="prayerStreak">0</span>
+                        <label>أيام متتالية</label>
+                    </div>
+                    <div class="stat">
+                        <span id="prayersCount">0</span>
+                        <label>صلاة اليوم</label>
+                    </div>
+                </div>
+            </div>
+            <nav class="sidebar-nav-elite">
+                <a href="#" class="nav-elite active" data-page="home">
+                    <i class="fas fa-chart-line"></i>
+                    <span>الرئيسية</span>
+                    <div class="nav-badge">Live</div>
+                </a>
+                <a href="#" class="nav-elite" data-page="prayers">
+                    <i class="fas fa-clock"></i>
+                    <span>مواقيت الصلاة</span>
+                </a>
+                <a href="#" class="nav-elite" data-page="ramadan">
+                    <i class="fas fa-moon"></i>
+                    <span>إمساكية رمضان</span>
+                    <div class="nav-badge">1447</div>
+                </a>
+                <a href="#" class="nav-elite" data-page="mosques">
+                    <i class="fas fa-mosque"></i>
+                    <span>المساجد القريبة</span>
+                </a>
+                <a href="#" class="nav-elite" data-page="qibla">
+                    <i class="fas fa-compass"></i>
+                    <span>اتجاه القبلة</span>
+                </a>
+                <a href="#" class="nav-elite" data-page="live">
+                    <i class="fas fa-video"></i>
+                    <span>بث مباشر</span>
+                    <div class="nav-badge live">●</div>
+                </a>
+                <a href="#" class="nav-elite" data-page="azkar">
+                    <i class="fas fa-hands-praying"></i>
+                    <span>أذكار وأدعية</span>
+                </a>
+                <a href="#" class="nav-elite" data-page="quran">
+                    <i class="fas fa-book-quran"></i>
+                    <span>القرآن الكريم</span>
+                </a>
+                <a href="#" class="nav-elite" data-page="settings">
+                    <i class="fas fa-sliders-h"></i>
+                    <span>الإعدادات المتقدمة</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer-elite">
+                <div class="prayer-progress">
+                    <div class="progress-label">تقدم الصلوات اليوم</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="prayerProgress" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <span id="completedPrayers">0</span>/<span id="totalPrayers">5</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-elite">
+            <!-- Top Bar Premium -->
+            <div class="top-bar-elite">
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="location-premium" id="locationSelector">
+                    <i class="fas fa-map-marker-alt fa-fw"></i>
+                    <span id="currentCityElite">القاهرة</span>
+                    <i class="fas fa-chevron-down"></i>
+                    <div class="location-dropdown" id="locationDropdown">
+                        <input type="text" placeholder="ابحث عن مدينة..." id="citySearchInput">
+                        <div class="cities-list" id="citiesList"></div>
+                    </div>
+                </div>
+                <div class="search-premium">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="بحث عن مدينة أو مسجد..." id="globalSearch">
+                </div>
+                <div class="actions-premium">
+                    <button class="action-btn" id="notificationBtn">
+                        <i class="fas fa-bell"></i>
+                        <span class="badge" id="notificationBadge">0</span>
+                    </button>
+                    <button class="action-btn theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pages Container -->
+            <div class="pages-container">
+                <!-- Home Page -->
+                <div class="page-elite active" id="homePage">
+                    <!-- Hero Section with Weather -->
+                    <div class="hero-premium" data-aos="fade-up">
+                        <div class="weather-info" id="weatherInfo">
+                            <i class="fas fa-cloud-sun"></i>
+                            <div class="weather-details">
+                                <span class="temp" id="temperature">--°C</span>
+                                <span class="condition" id="weatherCondition">جاري التحميل...</span>
+                            </div>
+                        </div>
+                        <div class="datetime-premium">
+                            <div class="hijri-big" id="hijriBig">-- -- ----</div>
+                            <div class="gregorian" id="gregorianBig">--</div>
+                        </div>
+                        <div class="city-time">
+                            <h1 id="heroCity">القاهرة</h1>
+                            <div class="current-time" id="currentTime">--:--:--</div>
+                        </div>
+                    </div>
+
+                    <!-- Prayer Times Dashboard -->
+                    <div class="prayer-dashboard" data-aos="fade-up" data-aos-delay="100">
+                        <div class="dashboard-header">
+                            <h2><i class="fas fa-clock"></i> مواقيت الصلاة</h2>
+                            <div class="method-selector">
+                                <select id="methodSelect" class="method-select">
+                                    <option value="5">🇪🇬 الهيئة المصرية للمساحة</option>
+                                    <option value="3">🌍 رابطة العالم الإسلامي</option>
+                                    <option value="2">🕌 جامعة الأزهر الشريف</option>
+                                    <option value="1">🕋 أم القرى (مكة)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="prayer-grid-advanced" id="prayerGridAdvanced"></div>
+                    </div>
+
+                    <!-- Next Prayer with Animation -->
+                    <div class="next-prayer-advanced" data-aos="fade-up" data-aos-delay="200">
+                        <div class="next-prayer-glow"></div>
+                        <div class="next-content">
+                            <div class="next-label">
+                                <i class="fas fa-hourglass-start"></i>
+                                <span>الصلاة القادمة</span>
+                            </div>
+                            <div class="next-name" id="nextPrayerAdvanced">--</div>
+                            <div class="next-time" id="nextTimeAdvanced">--:--</div>
+                            <div class="countdown-advanced">
+                                <canvas id="countdownCanvasAdvanced" width="100" height="100"></canvas>
+                                <div class="countdown-text" id="countdownTextAdvanced">--:--:--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Section -->
+                    <div class="charts-section" data-aos="fade-up" data-aos-delay="300">
+                        <div class="chart-card">
+                            <h3><i class="fas fa-chart-line"></i> جدول مواقيت الصلاة</h3>
+                            <canvas id="prayerChart" width="400" height="200"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3><i class="fas fa-chart-pie"></i> توزيع أوقات الصلاة</h3>
+                            <canvas id="prayerPieChart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Mosques Nearby -->
+                    <div class="mosques-section" data-aos="fade-up" data-aos-delay="400">
+                        <div class="section-header">
+                            <h3><i class="fas fa-mosque"></i> أقرب المساجد إليك</h3>
+                            <button class="view-all" id="viewAllMosques">عرض الكل <i class="fas fa-arrow-left"></i></button>
+                        </div>
+                        <div class="mosques-grid" id="mosquesGrid"></div>
+                    </div>
+
+                    <!-- Daily Content Premium -->
+                    <div class="daily-premium-grid" data-aos="fade-up" data-aos-delay="500">
+                        <div class="card-premium hadith-premium">
+                            <div class="card-header">
+                                <i class="fas fa-book-quran"></i>
+                                <h3>حديث اليوم</h3>
+                                <button class="refresh-btn" id="refreshHadithElite"><i class="fas fa-sync-alt"></i></button>
+                            </div>
+                            <div class="hadith-text-elite" id="hadithEliteText"></div>
+                        </div>
+                        <div class="card-premium dua-premium">
+                            <div class="card-header">
+                                <i class="fas fa-hands-praying"></i>
+                                <h3>دعاء اليوم</h3>
+                                <button class="refresh-btn" id="refreshDuaElite"><i class="fas fa-sync-alt"></i></button>
+                            </div>
+                            <div class="dua-text-elite" id="duaEliteText"></div>
+                        </div>
+                        <div class="card-premium tasbeeh-premium">
+                            <div class="card-header">
+                                <i class="fas fa-circle-notch"></i>
+                                <h3>عداد التسبيح</h3>
+                            </div>
+                            <div class="tasbeeh-counter">
+                                <div class="counter-display" id="tasbeehCount">0</div>
+                                <div class="tasbeeh-buttons">
+                                    <button class="tasbeeh-btn" id="tasbeehPlus"><i class="fas fa-plus"></i></button>
+                                    <button class="tasbeeh-btn" id="tasbeehReset"><i class="fas fa-undo-alt"></i></button>
+                                    <button class="tasbeeh-btn" id="tasbeehMinus"><i class="fas fa-minus"></i></button>
+                                </div>
+                                <div class="tasbeeh-phrases">
+                                    <div class="phrase" data-count="33">سبحان الله</div>
+                                    <div class="phrase" data-count="33">الحمد لله</div>
+                                    <div class="phrase" data-count="34">الله أكبر</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prayers Page -->
+                <div class="page-elite" id="prayersPage">
+                    <div class="page-header">
+                        <h2>مواقيت الصلاة التفصيلية</h2>
+                        <p>جميع الأوقات بتحديث لحظي - حسب توقيت مصر المحلي</p>
+                    </div>
+                    <div class="prayers-table-container">
+                        <table class="prayers-table">
+                            <thead>
+                                <tr>
+                                    <th>الصلاة</th>
+                                    <th>الوقت</th>
+                                    <th>الأذان</th>
+                                    <th>الإقامة</th>
+                                    <th>التنبيه</th>
+                                </tr>
+                            </thead>
+                            <tbody id="prayersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Ramadan Page -->
+                <div class="page-elite" id="ramadanPage">
+                    <div class="ramadan-hero">
+                        <div class="ramadan-countdown">
+                            <i class="fas fa-moon"></i>
+                            <div class="countdown-to-ramadan">
+                                <span>المتبقي على رمضان</span>
+                                <div class="countdown-numbers" id="ramadanCountdown">-- يوم</div>
+                            </div>
+                        </div>
+                        <h2>إمساكية شهر رمضان المبارك 1447</h2>
+                        <p>جميع الأوقات حسب التوقيت المحلي لكل مدينة</p>
+                    </div>
+                    <div class="ramadan-controls-advanced">
+                        <div class="control-group">
+                            <label>المدينة</label>
+                            <select id="ramadanCitySelect" class="ramadan-select-advanced"></select>
+                        </div>
+                        <div class="control-group">
+                            <label>العرض</label>
+                            <select id="ramadanView" class="ramadan-select-advanced">
+                                <option value="table">جدول</option>
+                                <option value="calendar">تقويم</option>
+                            </select>
+                        </div>
+                        <button class="export-ramadan" id="exportRamadan">
+                            <i class="fas fa-download"></i> تصدير PDF
+                        </button>
+                    </div>
+                    <div id="ramadanDisplay"></div>
+                </div>
+
+                <!-- Mosques Map Page -->
+                <div class="page-elite" id="mosquesPage">
+                    <div class="map-container">
+                        <div id="mosquesMap" style="height: 500px; border-radius: 20px;"></div>
+                    </div>
+                    <div class="mosques-list" id="mosquesList"></div>
+                </div>
+
+                <!-- Qibla Page -->
+                <div class="page-elite" id="qiblaPage">
+                    <div class="qibla-advanced">
+                        <div class="compass-3d">
+                            <div class="compass-face" id="compass3d">
+                                <div class="compass-needle-3d" id="compassNeedle3d">
+                                    <div class="needle-tip"></div>
+                                </div>
+                                <div class="compass-numbers">
+                                    <span>N</span>
+                                    <span>E</span>
+                                    <span>S</span>
+                                    <span>W</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="qibla-info-advanced">
+                            <div class="qibla-angle">
+                                <i class="fas fa-compass"></i>
+                                <span id="qiblaAngleAdvanced">--°</span>
+                            </div>
+                            <div class="qibla-distance">
+                                <i class="fas fa-kaaba"></i>
+                                <span id="qiblaDistance">-- كم</span>
+                            </div>
+                            <div class="device-status" id="deviceStatus">
+                                <i class="fas fa-mobile-alt"></i>
+                                <span>أدر هاتفك لتحديد الاتجاه</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live TV Page -->
+                <div class="page-elite" id="livePage">
+                    <div class="live-tv-container">
+                        <div class="video-player" id="videoPlayer">
+                            <iframe id="liveFrame" src="https://www.youtube.com/embed/1KZQAeqkG8Q?autoplay=0" frameborder="0" allowfullscreen></iframe>
+                        </div>
+                        <div class="channels-list">
+                            <h3>القنوات الدينية</h3>
+                            <div class="channels-grid">
+                                <div class="channel" data-url="https://www.youtube.com/embed/1KZQAeqkG8Q">
+                                    <i class="fas fa-tv"></i>
+                                    <span>قناة الناس</span>
+                                </div>
+                                <div class="channel" data-url="https://www.youtube.com/embed/8pF-lacCZwQ">
+                                    <i class="fas fa-tv"></i>
+                                    <span>قناة الرحمة</span>
+                                </div>
+                                <div class="channel" data-url="https://www.youtube.com/embed/dQw4w9WgXcQ">
+                                    <i class="fas fa-tv"></i>
+                                    <span>إقرأ</span>
+                                </div>
+                                <div class="channel" data-url="https://www.youtube.com/embed/2ZIpFytCSVc">
+                                    <i class="fas fa-tv"></i>
+                                    <span>الحافظ</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Azkar Page -->
+                <div class="page-elite" id="azkarPage">
+                    <div class="azkar-categories">
+                        <button class="azkar-cat active" data-cat="morning">🌅 أذكار الصباح</button>
+                        <button class="azkar-cat" data-cat="evening">🌙 أذكار المساء</button>
+                        <button class="azkar-cat" data-cat="prayer">🕌 أذكار الصلاة</button>
+                        <button class="azkar-cat" data-cat="sleep">😴 أذكار النوم</button>
+                    </div>
+                    <div class="azkar-list" id="azkarList"></div>
+                </div>
+
+                <!-- Quran Page -->
+                <div class="page-elite" id="quranPage">
+                    <div class="quran-player">
+                        <div class="surah-selector">
+                            <select id="surahSelect" class="surah-select">
+                                <option value="">📖 اختر سورة</option>
+                            </select>
+                            <select id="reciterSelect" class="reciter-select">
+                                <option value="ar.abdulbasit">🎙️ عبد الباسط عبد الصمد</option>
+                                <option value="ar.mishary">🎙️ مشاري راشد العفاسي</option>
+                                <option value="ar.sudais">🎙️ عبد الرحمن السديس</option>
+                                <option value="ar.maher">🎙️ ماهر المعيقلي</option>
+                            </select>
+                        </div>
+                        <div class="quran-text" id="quranText">
+                            <p style="text-align: center; padding: 50px;">🌟 اختر سورة لقراءة القرآن الكريم 🌟</p>
+                        </div>
+                        <audio id="quranAudio" controls style="width: 100%; margin-top: 20px; border-radius: 50px;">
+                            <source src="" type="audio/mpeg">
+                        </audio>
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div class="page-elite" id="settingsPage">
+                    <div class="settings-advanced">
+                        <div class="settings-section">
+                            <h3><i class="fas fa-bell"></i> الإشعارات</h3>
+                            <div class="setting-item">
+                                <label>إشعارات الأذان</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="adhanNotifications">
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <label>صوت الأذان</label>
+                                <select id="adhanSound">
+                                    <option value="makkah">🕋 أذان مكة المكرمة</option>
+                                    <option value="egypt">🇪🇬 أذان مصر (الشيخ النقشبندي)</option>
+                                    <option value="madinah">🕌 أذان المدينة المنورة</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>اهتزاز عند الأذان</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="vibrationSetting">
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3><i class="fas fa-palette"></i> المظهر</h3>
+                            <div class="setting-item">
+                                <label>الوضع</label>
+                                <select id="themeSelect">
+                                    <option value="dark">🌙 داكن</option>
+                                    <option value="light">☀️ فاتح</option>
+                                    <option value="auto">🔄 تلقائي</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>الألوان الأساسية</label>
+                                <div class="color-picker">
+                                    <div class="color-option" data-color="#1a472a" style="background: #1a472a;"></div>
+                                    <div class="color-option" data-color="#2c3e50" style="background: #2c3e50;"></div>
+                                    <div class="color-option" data-color="#7b2cbf" style="background: #7b2cbf;"></div>
+                                    <div class="color-option" data-color="#e67e22" style="background: #e67e22;"></div>
+                                    <div class="color-option" data-color="#008080" style="background: #008080;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3><i class="fas fa-database"></i> البيانات</h3>
+                            <div class="setting-item">
+                                <label>تحديث تلقائي</label>
+                                <select id="autoRefresh">
+                                    <option value="60">كل ساعة</option>
+                                    <option value="30">كل 30 دقيقة</option>
+                                    <option value="15">كل 15 دقيقة</option>
+                                    <option value="5">كل 5 دقائق</option>
+                                </select>
+                            </div>
+                            <button class="clear-data" id="clearData">🗑️ مسح البيانات المخزنة</button>
+                            <button class="backup-data" id="backupData">💾 نسخ احتياطي</button>
+                        </div>
+                        <div class="settings-section">
+                            <h3><i class="fas fa-info-circle"></i> عن التطبيق</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.8;">
+                                منصة مواقيت الصلاة المتكاملة لمصر<br>
+                                الإصدار 4.0 ELITE<br><br>
+                                يعتمد التطبيق على واجهة Aladhan API لحساب مواقيت الصلاة بدقة عالية<br>
+                                جميع الحقوق محفوظة © 2026
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="adhanAudioElite" preload="auto"></audio>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+    <script src="script-elite.js"></script>
+</body>
+</html>
