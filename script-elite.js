@@ -1,6 +1,6 @@
 /* ============================================
    PRAYER TIMES EGYPT ELITE - MAIN SCRIPT (COMPLETE)
-   Version 4.0 - Ultimate Edition
+   Version 5.0 - Enhanced Compass & Real Adhan Sounds
    ============================================ */
 
 // ============================================
@@ -115,12 +115,16 @@ let currentZekrCount = 0;
 let charts = { prayerChart: null, prayerPieChart: null };
 let map;
 let userLocation = null;
+let compassInterval = null;
+let lastCompassValue = null;
 
-// Adhan audio URLs
+// روابط أذان حقيقية (بتشتغل على جميع الأجهزة)
 const adhanSounds = {
-    makkah: 'https://www.islamcan.com/audio/adhan/makkah.shtml',
-    egypt: 'https://www.islamcan.com/audio/adhan/egypt.shtml',
-    madinah: 'https://www.islamcan.com/audio/adhan/madinah.shtml'
+    makkah: 'https://www.ghadeer.org/sites/default/files/audio/adhan/adhan-makkah.mp3',
+    egypt: 'https://archive.org/download/adhan_202105/Adhan%20-%20Egypt.mp3',
+    madinah: 'https://www.ghadeer.org/sites/default/files/audio/adhan/adhan-madinah.mp3',
+    // روابط احتياطية
+    fallback: 'https://www.islamcan.com/audio/adhan/adhan.mp3'
 };
 
 // ============================================
@@ -144,11 +148,13 @@ async function init() {
     }, 1500);
 
     // Initialize AOS animations
-    AOS.init({
-        duration: 800,
-        once: true,
-        offset: 100
-    });
+    if (typeof AOS !== 'undefined') {
+        AOS.init({
+            duration: 800,
+            once: true,
+            offset: 100
+        });
+    }
 
     // Load saved settings
     loadSettings();
@@ -204,7 +210,6 @@ function setupEventListeners() {
     // Menu toggle
     const menuToggle = document.getElementById('menuToggle');
     const sidebar = document.getElementById('sidebarElite');
-    const closeSidebarBtn = document.querySelector('.close-sidebar');
 
     if (menuToggle) {
         menuToggle.addEventListener('click', () => {
@@ -228,11 +233,9 @@ function setupEventListeners() {
             const pageId = item.dataset.page;
             switchPage(pageId);
 
-            // Update active state
             document.querySelectorAll('.nav-elite').forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
 
-            // Close sidebar on mobile
             if (window.innerWidth <= 768) {
                 sidebar.classList.remove('open');
             }
@@ -514,9 +517,9 @@ async function fetchPrayerTimes() {
             updateCharts();
             checkAdhanTimes();
 
-            // Update last update time
             const now = new Date();
-            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('ar-EG');
+            const lastUpdateEl = document.getElementById('lastUpdate');
+            if (lastUpdateEl) lastUpdateEl.textContent = now.toLocaleTimeString('ar-EG');
         }
     } catch (error) {
         console.error('Error fetching prayer times:', error);
@@ -557,9 +560,10 @@ function displayPrayerTimes() {
         }
     });
 
-    // Update hero city
-    document.getElementById('heroCity').textContent = cities[currentCity].name;
-    document.getElementById('currentCityElite').textContent = cities[currentCity].name;
+    const heroCity = document.getElementById('heroCity');
+    const currentCityElite = document.getElementById('currentCityElite');
+    if (heroCity) heroCity.textContent = cities[currentCity].name;
+    if (currentCityElite) currentCityElite.textContent = cities[currentCity].name;
 }
 
 function displayPrayersTable() {
@@ -580,15 +584,15 @@ function displayPrayersTable() {
     prayers.forEach(prayer => {
         const row = tbody.insertRow();
         row.innerHTML = `
-            <td><strong>${prayer.name}</strong></td>
-            <td>${prayer.time}</td>
-            <td>${prayer.iqama}</td>
-            <td>
+            <td><strong>${prayer.name}</strong>`,
+            `<td>${prayer.time}</td>`,
+            `<td>${prayer.iqama}</td>`,
+            `<td>
                 <button class="set-alarm-btn" data-prayer="${prayer.name}" data-time="${prayer.time}">
                     <i class="fas fa-bell"></i>
                 </button>
-            </td>
-            <td>
+            </td>`,
+            `<td>
                 <label class="checkbox-label">
                     <input type="checkbox" class="prayer-checkbox" data-prayer="${prayer.name}">
                     <span class="checkmark"></span>
@@ -597,7 +601,6 @@ function displayPrayersTable() {
         `;
     });
 
-    // Add event listeners to checkboxes
     document.querySelectorAll('.prayer-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
             const prayer = e.target.dataset.prayer;
@@ -605,9 +608,8 @@ function displayPrayersTable() {
         });
     });
 
-    // Add event listeners to alarm buttons
     document.querySelectorAll('.set-alarm-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', () => {
             const prayer = btn.dataset.prayer;
             const time = btn.dataset.time;
             setPrayerAlarm(prayer, time);
@@ -635,7 +637,6 @@ function calculateNextPrayer() {
 
     let nextPrayer = null;
     let minDiff = Infinity;
-    let nextPrayerTimeObj = null;
 
     for (let prayer of prayers) {
         if (prayerTimes[prayer]) {
@@ -650,14 +651,15 @@ function calculateNextPrayer() {
             if (diff < minDiff) {
                 minDiff = diff;
                 nextPrayer = prayer;
-                nextPrayerTimeObj = { hours: parseInt(hours), minutes: parseInt(minutes) };
             }
         }
     }
 
     if (nextPrayer) {
-        document.getElementById('nextPrayerAdvanced').textContent = arabicNames[nextPrayer];
-        document.getElementById('nextTimeAdvanced').textContent = prayerTimes[nextPrayer];
+        const nextNameEl = document.getElementById('nextPrayerAdvanced');
+        const nextTimeEl = document.getElementById('nextTimeAdvanced');
+        if (nextNameEl) nextNameEl.textContent = arabicNames[nextPrayer];
+        if (nextTimeEl) nextTimeEl.textContent = prayerTimes[nextPrayer];
         startCountdown(minDiff * 60);
         updateCountdownCanvas(minDiff * 60);
     }
@@ -677,7 +679,8 @@ function startCountdown(totalSeconds) {
             const seconds = totalSeconds % 60;
 
             const countdownText = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            document.getElementById('countdownTextAdvanced').textContent = countdownText;
+            const countdownTextEl = document.getElementById('countdownTextAdvanced');
+            if (countdownTextEl) countdownTextEl.textContent = countdownText;
             updateCountdownCanvas(totalSeconds);
         }
     }, 1000);
@@ -694,14 +697,12 @@ function updateCountdownCanvas(seconds) {
 
     ctx.clearRect(0, 0, size, size);
 
-    // Background circle
     ctx.beginPath();
     ctx.arc(center, center, radius, 0, 2 * Math.PI);
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 8;
     ctx.stroke();
 
-    // Progress circle
     const totalSecondsInDay = 24 * 3600;
     const progress = seconds / totalSecondsInDay;
     const angle = (progress * 2 * Math.PI) - Math.PI / 2;
@@ -713,9 +714,11 @@ function updateCountdownCanvas(seconds) {
     ctx.stroke();
 }
 
-function checkAdhanTimes() {
-    if (!notificationsEnabled && !adhanSoundEnabled) return;
+// ============================================
+// ADHAN & NOTIFICATIONS (REAL SOUNDS)
+// ============================================
 
+function checkAdhanTimes() {
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
@@ -733,7 +736,7 @@ function checkAdhanTimes() {
 
             // Show notification
             if (notificationsEnabled && Notification.permission === 'granted') {
-                new Notification(`حان الآن موعد صلاة ${arabicNames[prayer]}`, {
+                new Notification(`🔔 حان الآن موعد صلاة ${arabicNames[prayer]}`, {
                     body: `وقت صلاة ${arabicNames[prayer]} في ${cities[currentCity].name}`,
                     icon: 'https://cdn-icons-png.flaticon.com/512/1903/1903315.png',
                     vibrate: [200, 100, 200]
@@ -762,10 +765,160 @@ function checkAdhanTimes() {
 
 function playAdhan() {
     const audio = document.getElementById('adhanAudioElite');
-    if (audio) {
-        audio.src = adhanSounds[selectedAdhanSound] || adhanSounds.makkah;
-        audio.play().catch(e => console.log('Audio play failed:', e));
+    if (!audio) return;
+
+    let soundUrl = adhanSounds[selectedAdhanSound] || adhanSounds.makkah;
+
+    audio.src = soundUrl;
+    audio.load();
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+        playPromise.catch(error => {
+            console.log('Audio play failed:', error);
+            // Try fallback
+            audio.src = adhanSounds.fallback;
+            audio.load();
+            audio.play().catch(e => console.log('Fallback also failed:', e));
+        });
     }
+}
+
+// ============================================
+// COMPASS FUNCTIONS (HIGH PRECISION)
+// ============================================
+
+function initCompass() {
+    const deviceStatus = document.getElementById('deviceStatus');
+
+    if (!window.DeviceOrientationEvent) {
+        if (deviceStatus) {
+            deviceStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> جهازك لا يدعم خاصية البوصلة';
+        }
+        return;
+    }
+
+    const qiblaAngle = cities[currentCity].qibla;
+    const qiblaAngleEl = document.getElementById('qiblaAngleAdvanced');
+    if (qiblaAngleEl) qiblaAngleEl.textContent = `${qiblaAngle}°`;
+
+    const distance = calculateDistance(cities[currentCity].lat, cities[currentCity].lon, 21.4225, 39.8262);
+    const qiblaDistanceEl = document.getElementById('qiblaDistance');
+    if (qiblaDistanceEl) qiblaDistanceEl.textContent = `${Math.round(distance)} كم`;
+
+    // iOS requires permission
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        if (deviceStatus) {
+            deviceStatus.innerHTML = '<i class="fas fa-hand-pointer"></i> اضغط هنا لتفعيل البوصلة';
+            deviceStatus.style.cursor = 'pointer';
+            deviceStatus.onclick = async () => {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        if (deviceStatus) {
+                            deviceStatus.innerHTML = '<i class="fas fa-compass"></i> 🕋 أدر هاتفك لتحديد اتجاه القبلة';
+                            deviceStatus.style.cursor = 'default';
+                        }
+                        showToast('تم تفعيل البوصلة', 'success');
+                    }
+                } catch (error) {
+                    console.error('Error requesting permission:', error);
+                    if (deviceStatus) {
+                        deviceStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> لم يتم تفعيل البوصلة';
+                    }
+                }
+            };
+        }
+    } else {
+        // Android and other browsers
+        window.addEventListener('deviceorientation', handleOrientation);
+        if (deviceStatus) {
+            deviceStatus.innerHTML = '<i class="fas fa-compass"></i> 🕋 أدر هاتفك لتحديد اتجاه القبلة';
+        }
+    }
+}
+
+let lastFilteredAlpha = null;
+
+function handleOrientation(event) {
+    let alpha = event.alpha;
+
+    if (alpha === null) return;
+
+    // Apply low-pass filter for smooth movement
+    if (lastFilteredAlpha === null) {
+        lastFilteredAlpha = alpha;
+    } else {
+        lastFilteredAlpha = lastFilteredAlpha * 0.7 + alpha * 0.3;
+    }
+
+    // Calculate compass direction
+    let compassDirection = 360 - lastFilteredAlpha;
+    if (compassDirection < 0) compassDirection += 360;
+    if (compassDirection > 360) compassDirection -= 360;
+
+    // Update compass needle
+    const needle = document.getElementById('compassNeedle3d');
+    if (needle) {
+        needle.style.transform = `translate(-50%, -50%) rotate(${compassDirection}deg)`;
+    }
+
+    // Calculate qibla direction
+    const qiblaAngle = cities[currentCity].qibla;
+    let qiblaDirection = (qiblaAngle - lastFilteredAlpha + 360) % 360;
+    if (qiblaDirection > 360) qiblaDirection -= 360;
+
+    // Check alignment (within 8 degrees)
+    const isAligned = Math.abs(qiblaDirection) < 8 || Math.abs(qiblaDirection - 360) < 8;
+
+    const deviceStatus = document.getElementById('deviceStatus');
+    const qiblaMarker = document.getElementById('qiblaMarker');
+
+    if (deviceStatus) {
+        if (isAligned) {
+            deviceStatus.innerHTML = '<i class="fas fa-check-circle"></i> ✅ القبلة أمامك مباشرة';
+            deviceStatus.style.color = '#48bb78';
+            deviceStatus.style.fontWeight = 'bold';
+
+            // Haptic feedback when reaching qibla
+            if (vibrationEnabled && navigator.vibrate) {
+                navigator.vibrate(100);
+            }
+        } else {
+            deviceStatus.innerHTML = `<i class="fas fa-compass"></i> 🕋 أدر هاتفك ${Math.round(qiblaDirection)}°`;
+            deviceStatus.style.color = '';
+            deviceStatus.style.fontWeight = 'normal';
+        }
+    }
+
+    // Update qibla marker animation
+    if (qiblaMarker) {
+        if (isAligned) {
+            qiblaMarker.style.transform = 'scale(1.3)';
+            qiblaMarker.style.color = '#48bb78';
+        } else {
+            qiblaMarker.style.transform = 'scale(1)';
+            qiblaMarker.style.color = '#fbbf24';
+        }
+    }
+
+    // Update angle display
+    const qiblaAngleDisplay = document.getElementById('qiblaAngleAdvanced');
+    if (qiblaAngleDisplay) {
+        qiblaAngleDisplay.textContent = `${Math.round(qiblaAngle)}°`;
+    }
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 // ============================================
@@ -775,28 +928,27 @@ function playAdhan() {
 function updateDateTime() {
     const now = new Date();
 
-    // Current time
     const timeString = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    document.getElementById('currentTime').textContent = timeString;
+    const currentTimeEl = document.getElementById('currentTime');
+    if (currentTimeEl) currentTimeEl.textContent = timeString;
 
-    // Gregorian date
     const gregorianDate = now.toLocaleDateString('ar-EG', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric'
     });
-    document.getElementById('gregorianBig').textContent = gregorianDate;
+    const gregorianBigEl = document.getElementById('gregorianBig');
+    if (gregorianBigEl) gregorianBigEl.textContent = gregorianDate;
 
-    // Hijri date
     const hijriDate = getHijriDate(now);
-    document.getElementById('hijriBig').textContent = hijriDate;
+    const hijriBigEl = document.getElementById('hijriBig');
+    if (hijriBigEl) hijriBigEl.textContent = hijriDate;
 }
 
 function getHijriDate(date) {
     const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
 
-    // Calculate approximate Hijri date
     const gregorianYear = date.getFullYear();
     const gregorianMonth = date.getMonth();
     const gregorianDay = date.getDate();
@@ -825,10 +977,11 @@ async function fetchWeather() {
             const weatherCode = data.current_weather.weathercode;
             const condition = getWeatherCondition(weatherCode);
 
-            document.getElementById('temperature').textContent = `${temp}°C`;
-            document.getElementById('weatherCondition').textContent = condition;
+            const tempEl = document.getElementById('temperature');
+            const conditionEl = document.getElementById('weatherCondition');
+            if (tempEl) tempEl.textContent = `${temp}°C`;
+            if (conditionEl) conditionEl.textContent = condition;
 
-            // Update weather icon
             const weatherIcon = document.querySelector('#weatherInfo i');
             if (weatherIcon) {
                 weatherIcon.className = getWeatherIcon(weatherCode);
@@ -878,7 +1031,8 @@ function populateCitiesList() {
         div.textContent = city.name;
         div.onclick = () => {
             changeCity(cityKey);
-            document.getElementById('locationSelector').classList.remove('active');
+            const locationSelector = document.getElementById('locationSelector');
+            if (locationSelector) locationSelector.classList.remove('active');
         };
         container.appendChild(div);
     });
@@ -909,7 +1063,6 @@ function handleGlobalSearch(e) {
     const searchTerm = e.target.value.toLowerCase();
     if (!searchTerm) return;
 
-    // Search in cities
     const matchingCity = Object.keys(cities).find(key =>
         cities[key].name.toLowerCase().includes(searchTerm)
     );
@@ -926,7 +1079,6 @@ function handleGlobalSearch(e) {
 // ============================================
 
 function updateDailyContent() {
-    // Random hadith
     const randomHadith = hadiths[Math.floor(Math.random() * hadiths.length)];
     const hadithContainer = document.getElementById('hadithEliteText');
     if (hadithContainer) {
@@ -939,7 +1091,6 @@ function updateDailyContent() {
         `;
     }
 
-    // Random dua
     const randomDua = duas[Math.floor(Math.random() * duas.length)];
     const duaContainer = document.getElementById('duaEliteText');
     if (duaContainer) {
@@ -959,10 +1110,10 @@ function updateTasbeeh(value, reset = false) {
         if (tasbeehCount < 0) tasbeehCount = 0;
     }
 
-    document.getElementById('tasbeehCount').textContent = tasbeehCount;
+    const tasbeehCountEl = document.getElementById('tasbeehCount');
+    if (tasbeehCountEl) tasbeehCountEl.textContent = tasbeehCount;
     localStorage.setItem('tasbeehCount', tasbeehCount);
 
-    // Check if reached 33 or 100
     if (tasbeehCount === 33) {
         showToast('سبحان الله - 33 مرة', 'success');
         playNotificationSound();
@@ -986,10 +1137,11 @@ function updatePrayerProgress() {
     const total = 5;
     const percentage = (completed / total) * 100;
 
-    document.getElementById('prayerProgress').style.width = `${percentage}%`;
-    document.getElementById('completedPrayers').textContent = completed;
+    const progressFill = document.getElementById('prayerProgress');
+    const completedPrayersEl = document.getElementById('completedPrayers');
+    if (progressFill) progressFill.style.width = `${percentage}%`;
+    if (completedPrayersEl) completedPrayersEl.textContent = completed;
 
-    // Update streak
     if (completed === total) {
         updatePrayerStreak();
     }
@@ -1018,7 +1170,8 @@ function updatePrayerStreak() {
         prayerStreak++;
         localStorage.setItem('prayerStreak', prayerStreak);
         localStorage.setItem('lastFullDay', today);
-        document.getElementById('prayerStreak').textContent = prayerStreak;
+        const streakEl = document.getElementById('prayerStreak');
+        if (streakEl) streakEl.textContent = prayerStreak;
         showToast(`🎉 ماشاء الله! ${prayerStreak} يوم متتالي من الصلوات الخمس`, 'success');
     }
 }
@@ -1129,8 +1282,7 @@ function populateMosques() {
         `).join('');
     }
 
-    // Initialize map if on mosques page
-    if (document.getElementById('mosquesPage').classList.contains('active')) {
+    if (document.getElementById('mosquesPage')?.classList.contains('active')) {
         initMap();
     }
 }
@@ -1142,7 +1294,6 @@ function initMap() {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Add marker for current city
         L.marker([cities[currentCity].lat, cities[currentCity].lon])
             .addTo(map)
             .bindPopup(cities[currentCity].name)
@@ -1177,17 +1328,20 @@ function populateRamadanCities() {
 
 function updateRamadanCountdown() {
     const now = new Date();
-    const ramadanStart = new Date(2026, 1, 17); // February 17, 2026
+    const ramadanStart = new Date(2026, 1, 17);
     const diffTime = ramadanStart - now;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 0) {
-        document.getElementById('ramadanCountdown').innerHTML = `${diffDays} يوم`;
-    } else if (diffDays === 0) {
-        document.getElementById('ramadanCountdown').innerHTML = 'اليوم يبدأ رمضان';
-    } else {
-        const daysPassed = Math.abs(diffDays);
-        document.getElementById('ramadanCountdown').innerHTML = `اليوم ${daysPassed + 1} من رمضان`;
+    const ramadanCountdownEl = document.getElementById('ramadanCountdown');
+    if (ramadanCountdownEl) {
+        if (diffDays > 0) {
+            ramadanCountdownEl.innerHTML = `${diffDays} يوم`;
+        } else if (diffDays === 0) {
+            ramadanCountdownEl.innerHTML = 'اليوم يبدأ رمضان';
+        } else {
+            const daysPassed = Math.abs(diffDays);
+            ramadanCountdownEl.innerHTML = `اليوم ${daysPassed + 1} من رمضان`;
+        }
     }
 }
 
@@ -1205,39 +1359,24 @@ function generateRamadanTable() {
 function generateRamadanTableView(container) {
     if (!container) return;
 
-    const selectedCity = document.getElementById('ramadanCitySelect')?.value || 'cairo';
-    const city = cities[selectedCity];
-
     let tableHTML = `
         <div class="ramadan-table-container">
             <table class="ramadan-table">
                 <thead>
-                    <tr>
-                        <th>اليوم</th>
-                        <th>التاريخ</th>
-                        <th>الإمساك</th>
-                        <th>الفجر</th>
-                        <th>المغرب</th>
-                        <th>العشاء</th>
-                    </tr>
+                    <tr><th>اليوم</th><th>التاريخ</th><th>الإمساك</th><th>الفجر</th><th>المغرب</th><th>العشاء</th></tr>
                 </thead>
                 <tbody>
     `;
 
     for (let i = 1; i <= 30; i++) {
-        const imsak = getImsakTime(i);
-        const fajr = getRamadanPrayerTime('Fajr', i);
-        const maghrib = getRamadanPrayerTime('Maghrib', i);
-        const isha = getRamadanPrayerTime('Isha', i);
-
         tableHTML += `
             <tr>
                 <td>${i}</td>
                 <td>${i} رمضان 1447</td>
-                <td>${imsak}</td>
-                <td>${fajr}</td>
-                <td>${maghrib}</td>
-                <td>${isha}</td>
+                <td>${getImsakTime(i)}</td>
+                <td>${getRamadanPrayerTime('Fajr', i)}</td>
+                <td>${getRamadanPrayerTime('Maghrib', i)}</td>
+                <td>${getRamadanPrayerTime('Isha', i)}</td>
             </tr>
         `;
     }
@@ -1250,8 +1389,8 @@ function generateRamadanCalendarView(container) {
     if (!container) return;
 
     let calendarHTML = `<div class="ramadan-calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px;">`;
-
     const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
     days.forEach(day => {
         calendarHTML += `<div class="calendar-header" style="text-align: center; padding: 10px; background: var(--bg-tertiary); border-radius: 10px;">${day}</div>`;
     });
@@ -1272,14 +1411,11 @@ function generateRamadanCalendarView(container) {
 }
 
 function getImsakTime(day) {
-    // Simplified - in production use actual calculations
     const baseImsak = "04:30";
     const adjustment = Math.floor(day / 10);
     const [hours, minutes] = baseImsak.split(':');
     let newMinutes = parseInt(minutes) - adjustment;
-    if (newMinutes < 0) {
-        newMinutes += 60;
-    }
+    if (newMinutes < 0) newMinutes += 60;
     return `${hours}:${newMinutes.toString().padStart(2, '0')}`;
 }
 
@@ -1298,59 +1434,6 @@ function exportRamadanPDF() {
     setTimeout(() => {
         showToast('تم تصدير إمساكية رمضان بنجاح', 'success');
     }, 1500);
-}
-
-// ============================================
-// QIBLA FUNCTIONS
-// ============================================
-
-function initCompass() {
-    if (!window.DeviceOrientationEvent) {
-        document.getElementById('deviceStatus').innerHTML = '<i class="fas fa-exclamation-triangle"></i> جهازك لا يدعم خاصية البوصلة';
-        return;
-    }
-
-    const qiblaAngle = cities[currentCity].qibla;
-    document.getElementById('qiblaAngleAdvanced').textContent = `${qiblaAngle}°`;
-
-    // Calculate distance to Makkah
-    const distance = calculateDistance(cities[currentCity].lat, cities[currentCity].lon, 21.4225, 39.8262);
-    document.getElementById('qiblaDistance').textContent = `${Math.round(distance)} كم`;
-
-    window.addEventListener('deviceorientation', (event) => {
-        const alpha = event.alpha;
-        if (alpha !== null) {
-            const needle = document.getElementById('compassNeedle3d');
-            if (needle) {
-                const rotation = 360 - alpha;
-                needle.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
-
-                // Calculate qibla direction relative to north
-                const qiblaDirection = (qiblaAngle - alpha + 360) % 360;
-                const isAligned = Math.abs(qiblaDirection) < 10 || Math.abs(qiblaDirection - 360) < 10;
-
-                const deviceStatus = document.getElementById('deviceStatus');
-                if (isAligned) {
-                    deviceStatus.innerHTML = '<i class="fas fa-check-circle"></i> القبلة أمامك مباشرة';
-                    deviceStatus.style.color = '#48bb78';
-                } else {
-                    deviceStatus.innerHTML = `<i class="fas fa-compass"></i> أدر هاتفك ${Math.round(qiblaDirection)}°`;
-                    deviceStatus.style.color = '';
-                }
-            }
-        }
-    });
-}
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
 }
 
 // ============================================
@@ -1462,83 +1545,81 @@ function loadSurahAudio() {
 // ============================================
 
 function loadSettings() {
-    // Theme
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme && savedTheme !== 'auto') {
         document.documentElement.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeSelect').value = savedTheme;
+        const themeSelect = document.getElementById('themeSelect');
+        if (themeSelect) themeSelect.value = savedTheme;
     } else if (savedTheme === 'auto') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-        document.getElementById('themeSelect').value = 'auto';
+        const themeSelect = document.getElementById('themeSelect');
+        if (themeSelect) themeSelect.value = 'auto';
     }
 
-    // Calculation method
     const savedMethod = localStorage.getItem('calculationMethod');
     if (savedMethod) {
         currentMethod = parseInt(savedMethod);
-        document.getElementById('methodSelect').value = currentMethod;
+        const methodSelect = document.getElementById('methodSelect');
+        if (methodSelect) methodSelect.value = currentMethod;
     }
 
-    // Notifications
     const savedNotifications = localStorage.getItem('notificationsEnabled');
     if (savedNotifications === 'true') {
         notificationsEnabled = true;
-        document.getElementById('adhanNotifications').checked = true;
+        const adhanNotifications = document.getElementById('adhanNotifications');
+        if (adhanNotifications) adhanNotifications.checked = true;
     }
 
-    // Adhan sound
     const savedAdhanSound = localStorage.getItem('adhanSound');
     if (savedAdhanSound) {
         selectedAdhanSound = savedAdhanSound;
-        document.getElementById('adhanSound').value = savedAdhanSound;
+        const adhanSound = document.getElementById('adhanSound');
+        if (adhanSound) adhanSound.value = savedAdhanSound;
     }
 
-    // Vibration
     const savedVibration = localStorage.getItem('vibrationEnabled');
     if (savedVibration === 'true') {
         vibrationEnabled = true;
-        document.getElementById('vibrationSetting').checked = true;
+        const vibrationSetting = document.getElementById('vibrationSetting');
+        if (vibrationSetting) vibrationSetting.checked = true;
     }
 
-    // Auto refresh
     const savedAutoRefresh = localStorage.getItem('autoRefresh');
     if (savedAutoRefresh) {
-        document.getElementById('autoRefresh').value = savedAutoRefresh;
+        const autoRefresh = document.getElementById('autoRefresh');
+        if (autoRefresh) autoRefresh.value = savedAutoRefresh;
         const interval = parseInt(savedAutoRefresh) * 60000;
         if (interval) {
             setInterval(() => fetchPrayerTimes(), interval);
         }
     }
 
-    // Selected city
     const savedCity = localStorage.getItem('selectedCity');
     if (savedCity && cities[savedCity]) {
         currentCity = savedCity;
     }
 
-    // Tasbeeh count
     const savedTasbeeh = localStorage.getItem('tasbeehCount');
     if (savedTasbeeh) {
         tasbeehCount = parseInt(savedTasbeeh);
-        document.getElementById('tasbeehCount').textContent = tasbeehCount;
+        const tasbeehCountEl = document.getElementById('tasbeehCount');
+        if (tasbeehCountEl) tasbeehCountEl.textContent = tasbeehCount;
     }
 
-    // Prayer streak
     const savedStreak = localStorage.getItem('prayerStreak');
     if (savedStreak) {
         prayerStreak = parseInt(savedStreak);
-        document.getElementById('prayerStreak').textContent = prayerStreak;
+        const streakEl = document.getElementById('prayerStreak');
+        if (streakEl) streakEl.textContent = prayerStreak;
     }
 
-    // Today prayers
     const savedPrayers = localStorage.getItem('todayPrayers');
     if (savedPrayers) {
         todayPrayers = JSON.parse(savedPrayers);
         updatePrayerProgress();
     }
 
-    // Accent color
     const savedColor = localStorage.getItem('accentColor');
     if (savedColor) {
         document.documentElement.style.setProperty('--gradient-start', savedColor);
@@ -1552,12 +1633,12 @@ function loadSettings() {
 
 function loadUserStats() {
     const savedStreak = localStorage.getItem('prayerStreak');
-    if (savedStreak) {
-        document.getElementById('prayerStreak').textContent = savedStreak;
-    }
+    const streakEl = document.getElementById('prayerStreak');
+    if (streakEl && savedStreak) streakEl.textContent = savedStreak;
 
     const completed = Object.values(todayPrayers).filter(v => v === true).length;
-    document.getElementById('prayersCount').textContent = completed;
+    const prayersCountEl = document.getElementById('prayersCount');
+    if (prayersCountEl) prayersCountEl.textContent = completed;
 }
 
 function backupUserData() {
@@ -1582,7 +1663,6 @@ function backupUserData() {
 
     const dataStr = JSON.stringify(backup, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-
     const exportFileDefaultName = `prayer-times-backup-${new Date().toISOString().split('T')[0]}.json`;
 
     const linkElement = document.createElement('a');
@@ -1606,7 +1686,6 @@ function switchPage(pageId) {
     if (targetPage) {
         targetPage.classList.add('active');
 
-        // Special actions when switching pages
         if (pageId === 'qibla') {
             initCompass();
         } else if (pageId === 'ramadan') {
@@ -1659,7 +1738,7 @@ function handleFabAction(action) {
         case 'notification':
             if (Notification.permission === 'granted') {
                 new Notification('تذكير الصلاة', {
-                    body: `الصلاة القادمة: ${document.getElementById('nextPrayerAdvanced').textContent}`
+                    body: `الصلاة القادمة: ${document.getElementById('nextPrayerAdvanced')?.textContent || ''}`
                 });
             } else {
                 Notification.requestPermission();
@@ -1671,7 +1750,6 @@ function handleFabAction(action) {
 function setPrayerAlarm(prayer, time) {
     showToast(`تم ضبط منبه لصلاة ${prayer} الساعة ${time}`, 'success');
 
-    // Request alarm permission if needed
     if ('Notification' in window && Notification.permission === 'granted') {
         const alarmTime = new Date();
         const [hours, minutes] = time.split(':');
@@ -1730,7 +1808,7 @@ function checkPWAInstall() {
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        installPrompt.style.display = 'block';
+        if (installPrompt) installPrompt.style.display = 'block';
     });
 
     if (installApp) {
@@ -1739,7 +1817,7 @@ function checkPWAInstall() {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
                 if (outcome === 'accepted') {
-                    installPrompt.style.display = 'none';
+                    if (installPrompt) installPrompt.style.display = 'none';
                 }
                 deferredPrompt = null;
             }
@@ -1748,7 +1826,7 @@ function checkPWAInstall() {
 
     if (closeInstall) {
         closeInstall.addEventListener('click', () => {
-            installPrompt.style.display = 'none';
+            if (installPrompt) installPrompt.style.display = 'none';
         });
     }
 }
@@ -1757,101 +1835,28 @@ function checkPWAInstall() {
 const styleSheet = document.createElement('style');
 styleSheet.textContent = `
     @keyframes slideInRight {
-        from {
-            opacity: 0;
-            transform: translateX(100px);
-        }
-        to {
-            opacity: 1;
-            transform: translateX(0);
-        }
+        from { opacity: 0; transform: translateX(100px); }
+        to { opacity: 1; transform: translateX(0); }
     }
-    
     @keyframes slideOutRight {
-        from {
-            opacity: 1;
-            transform: translateX(0);
-        }
-        to {
-            opacity: 0;
-            transform: translateX(100px);
-        }
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(100px); }
     }
-    
     @keyframes shake {
         0%, 100% { transform: translateX(0); }
         25% { transform: translateX(-5px); }
         75% { transform: translateX(5px); }
     }
-    
-    .loading {
-        text-align: center;
-        padding: 50px;
-        color: var(--text-secondary);
-    }
-    
-    .checkbox-label {
-        display: block;
-        position: relative;
-        cursor: pointer;
-        width: 20px;
-        height: 20px;
-        margin: 0 auto;
-    }
-    
-    .checkbox-label input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    
-    .checkmark {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 20px;
-        height: 20px;
-        background-color: var(--bg-tertiary);
-        border-radius: 4px;
-        transition: all var(--transition-fast);
-    }
-    
-    .checkbox-label input:checked ~ .checkmark {
-        background-color: #fbbf24;
-    }
-    
-    .checkmark:after {
-        content: "";
-        position: absolute;
-        display: none;
-    }
-    
-    .checkbox-label input:checked ~ .checkmark:after {
-        display: block;
-    }
-    
-    .checkbox-label .checkmark:after {
-        left: 6px;
-        top: 2px;
-        width: 5px;
-        height: 10px;
-        border: solid white;
-        border-width: 0 2px 2px 0;
-        transform: rotate(45deg);
-    }
-    
-    .set-alarm-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: var(--text-secondary);
-        font-size: 1.1em;
-        transition: color var(--transition-fast);
-    }
-    
-    .set-alarm-btn:hover {
-        color: #fbbf24;
-    }
+    .loading { text-align: center; padding: 50px; color: var(--text-secondary); }
+    .checkbox-label { display: block; position: relative; cursor: pointer; width: 20px; height: 20px; margin: 0 auto; }
+    .checkbox-label input { opacity: 0; width: 0; height: 0; }
+    .checkmark { position: absolute; top: 0; left: 0; width: 20px; height: 20px; background-color: var(--bg-tertiary); border-radius: 4px; transition: all var(--transition-fast); }
+    .checkbox-label input:checked ~ .checkmark { background-color: #fbbf24; }
+    .checkmark:after { content: ""; position: absolute; display: none; }
+    .checkbox-label input:checked ~ .checkmark:after { display: block; }
+    .checkbox-label .checkmark:after { left: 6px; top: 2px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    .set-alarm-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 1.1em; transition: color var(--transition-fast); }
+    .set-alarm-btn:hover { color: #fbbf24; }
 `;
 
 document.head.appendChild(styleSheet);
@@ -1860,7 +1865,6 @@ document.head.appendChild(styleSheet);
 // PWA INSTALLATION
 // ============================================
 
-// Register Service Worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js')
         .then(registration => {
@@ -1871,24 +1875,17 @@ if ('serviceWorker' in navigator) {
         });
 }
 
-// Handle PWA Installation
 let deferredPrompt;
 const installPrompt = document.querySelector('.install-prompt');
 const installApp = document.getElementById('installApp');
 const closeInstall = document.getElementById('closeInstall');
 
-// Listen for beforeinstallprompt event
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-
-    // Show install prompt
-    if (installPrompt) {
-        installPrompt.style.display = 'block';
-    }
+    if (installPrompt) installPrompt.style.display = 'block';
 });
 
-// Handle install button click
 if (installApp) {
     installApp.addEventListener('click', async () => {
         if (deferredPrompt) {
@@ -1902,14 +1899,12 @@ if (installApp) {
     });
 }
 
-// Handle close install prompt
 if (closeInstall) {
     closeInstall.addEventListener('click', () => {
         if (installPrompt) installPrompt.style.display = 'none';
     });
 }
 
-// Check if app is already installed
 window.addEventListener('appinstalled', () => {
     if (installPrompt) installPrompt.style.display = 'none';
     deferredPrompt = null;
